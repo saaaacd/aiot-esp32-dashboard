@@ -89,6 +89,6 @@ while True:
             st.subheader("濕度趨勢圖 (%)")
             st.line_chart(disp_df[['時間戳記', '濕度']].set_index('時間戳記').iloc[::-1])
         else:
-            st.warning("目前尚無資料，請稍候...")
+            st.warning("線上版本僅供介面展示，即時硬體連動需於本地執行")
             
     time.sleep(2)
