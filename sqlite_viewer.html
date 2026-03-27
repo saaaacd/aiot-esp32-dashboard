@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIOT SQLite3 Viewer — WiFi Sensor Data</title>
+    <meta name="description" content="A modern SQLite3 database viewer for AIOT WiFi sensor data">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- sql.js for reading SQLite in browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2035;
+            --bg-card-hover: #1f2847;
+            --border: #2a3555;
+            --text-primary: #e8ecf4;
+            --text-secondary: #8892a8;
+            --text-muted: #5a6478;
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --accent-light: #818cf8;
+            --success: #34d399;
+            --warning: #fbbf24;
+            --danger: #f87171;
+            --cyan: #22d3ee;
+            --pink: #f472b6;
+            --gradient-1: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --gradient-2: linear-gradient(135deg, #22d3ee, #6366f1);
+            --gradient-3: linear-gradient(135deg, #f472b6, #fb923c);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image:
+                radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(34, 211, 238, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 80%, rgba(244, 114, 182, 0.05) 0%, transparent 50%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .bg-grid::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            animation: fadeInDown 0.8s ease;
+        }
+
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1rem;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            color: var(--accent-light);
+            margin-bottom: 1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .header-badge .dot {
+            width: 6px;
+            height: 6px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .header h1 {
+            font-size: 2.4rem;
+            font-weight: 700;
+            background: var(--gradient-2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        /* File loader */
+        .loader-section {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.6s ease 0.2s both;
+        }
+
+        .file-loader {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+        }
+
+        .file-loader label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: var(--gradient-1);
+            color: white;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px var(--accent-glow);
+        }
+
+        .btn-secondary {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent-light);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(99, 102, 241, 0.2);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .file-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--cyan);
+            padding: 0.4rem 0.8rem;
+            background: rgba(34, 211, 238, 0.08);
+            border-radius: 8px;
+        }
+
+        /* Stats Row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.6s ease 0.3s both;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.2rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .stat-card:nth-child(1)::before { background: var(--gradient-1); }
+        .stat-card:nth-child(2)::before { background: var(--gradient-3); }
+        .stat-card:nth-child(3)::before { background: var(--gradient-2); }
+        .stat-card:nth-child(4)::before { background: linear-gradient(135deg, var(--success), var(--cyan)); }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-card:nth-child(1) .stat-value { color: var(--accent-light); }
+        .stat-card:nth-child(2) .stat-value { color: var(--pink); }
+        .stat-card:nth-child(3) .stat-value { color: var(--cyan); }
+        .stat-card:nth-child(4) .stat-value { color: var(--success); }
+
+        .stat-sub {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.3rem;
+        }
+
+        /* Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.6s ease 0.4s both;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .chart-card:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .chart-card h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .chart-card h3 .icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+        }
+
+        .icon-temp { background: rgba(244, 114, 182, 0.15); }
+        .icon-humd { background: rgba(34, 211, 238, 0.15); }
+
+        .chart-wrapper {
+            position: relative;
+            height: 250px;
+        }
+
+        /* Data Table */
+        .table-section {
+            animation: fadeInUp 0.6s ease 0.5s both;
+        }
+
+        .table-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .table-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .table-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .search-box {
+            padding: 0.5rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            outline: none;
+            width: 220px;
+            transition: all 0.3s ease;
+        }
+
+        .search-box:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .search-box::placeholder {
+            color: var(--text-muted);
+        }
+
+        .table-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .table-scroll::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        .table-scroll::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        th {
+            padding: 0.9rem 1.2rem;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.2s;
+        }
+
+        th:hover {
+            color: var(--accent-light);
+        }
+
+        th .sort-arrow {
+            margin-left: 4px;
+            opacity: 0.3;
+            transition: opacity 0.2s;
+        }
+
+        th.sorted .sort-arrow {
+            opacity: 1;
+            color: var(--accent-light);
+        }
+
+        td {
+            padding: 0.8rem 1.2rem;
+            font-size: 0.88rem;
+            border-bottom: 1px solid rgba(42, 53, 85, 0.5);
+            transition: background 0.2s;
+        }
+
+        tr:hover td {
+            background: var(--bg-card-hover);
+        }
+
+        td:first-child {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .temp-cell {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+        }
+
+        .temp-hot { color: var(--danger); }
+        .temp-warm { color: var(--warning); }
+        .temp-cool { color: var(--cyan); }
+
+        .humd-cell {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+        }
+
+        .humd-high { color: #60a5fa; }
+        .humd-mid { color: var(--success); }
+        .humd-low { color: var(--warning); }
+
+        .timestamp-cell {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+
+        /* Bar indicator */
+        .bar-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .mini-bar {
+            width: 60px;
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .mini-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .mini-bar-fill.temp { background: var(--gradient-3); }
+        .mini-bar-fill.humd { background: var(--gradient-2); }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .page-btn {
+            padding: 0.4rem 0.8rem;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent-light);
+        }
+
+        .page-btn.active {
+            background: var(--gradient-1);
+            border-color: transparent;
+            color: white;
+        }
+
+        .page-info {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin: 0 0.5rem;
+        }
+
+        /* SQL Query */
+        .sql-section {
+            margin-top: 2rem;
+            animation: fadeInUp 0.6s ease 0.6s both;
+        }
+
+        .sql-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .sql-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sql-header h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .sql-input-area {
+            padding: 1rem 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .sql-input {
+            flex: 1;
+            padding: 0.7rem 1rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--cyan);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .sql-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .sql-result {
+            padding: 0 1.5rem 1.5rem;
+            max-height: 300px;
+            overflow: auto;
+        }
+
+        .sql-result table {
+            font-size: 0.82rem;
+        }
+
+        /* No data state */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state .icon-large {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state h3 {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-state p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Status bar */
+        .status-bar {
+            margin-top: 2rem;
+            padding: 0.8rem 1.2rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .status-bar .status-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.error {
+            background: var(--danger);
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .header h1 { font-size: 1.6rem; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid { grid-template-columns: 1fr; }
+            .file-loader { flex-direction: column; }
+            .sql-input-area { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header" id="pageHeader">
+            <div class="header-badge">
+                <span class="dot"></span>
+                AIOT HW1 — WiFi Sensor Data
+            </div>
+            <h1>SQLite3 Database Viewer</h1>
+            <p>Load your <code style="color:var(--cyan)">aiotdb.db</code> file to explore temperature &amp; humidity data</p>
+        </header>
+
+        <!-- File Loader -->
+        <div class="loader-section">
+            <div class="file-loader">
+                <label>📂 Database:</label>
+                <input type="file" id="fileInput" accept=".db,.sqlite,.sqlite3">
+                <button class="btn btn-primary" id="loadBtn" onclick="document.getElementById('fileInput').click()">
+                    🗄️ Load .db File
+                </button>
+                <span class="file-name" id="fileName">No file loaded</span>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row" id="statsRow" style="display:none;">
+            <div class="stat-card">
+                <div class="stat-label">Total Records</div>
+                <div class="stat-value" id="statTotal">—</div>
+                <div class="stat-sub">entries in datalog</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avg Temperature</div>
+                <div class="stat-value" id="statAvgTemp">—</div>
+                <div class="stat-sub">°C average</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avg Humidity</div>
+                <div class="stat-value" id="statAvgHumd">—</div>
+                <div class="stat-sub">% average</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Time Range</div>
+                <div class="stat-value" id="statRange">—</div>
+                <div class="stat-sub" id="statRangeSub">hours of data</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid" id="chartsGrid" style="display:none;">
+            <div class="chart-card">
+                <h3>
+                    <span class="icon icon-temp">🌡️</span>
+                    Temperature Over Time
+                </h3>
+                <div class="chart-wrapper">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>
+                    <span class="icon icon-humd">💧</span>
+                    Humidity Over Time
+                </h3>
+                <div class="chart-wrapper">
+                    <canvas id="humdChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-section" id="tableSection" style="display:none;">
+            <div class="table-header">
+                <h3>📋 Data Records</h3>
+                <div class="table-controls">
+                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search records...">
+                </div>
+            </div>
+            <div class="table-card">
+                <div class="table-scroll" id="tableScroll">
+                    <table>
+                        <thead id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </div>
+
+        <!-- Custom SQL -->
+        <div class="sql-section" id="sqlSection" style="display:none;">
+            <div class="sql-card">
+                <div class="sql-header">
+                    <h3>⚡ Custom SQL Query</h3>
+                </div>
+                <div class="sql-input-area">
+                    <input type="text" class="sql-input" id="sqlInput" 
+                        value="SELECT * FROM datalog ORDER BY id DESC LIMIT 10"
+                        placeholder="Enter SQL query...">
+                    <button class="btn btn-primary" id="runSqlBtn" onclick="runCustomSQL()">▶ Run</button>
+                </div>
+                <div class="sql-result" id="sqlResult"></div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar" id="statusBar">
+            <div class="status-left">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Ready — Load a .db file to begin</span>
+            </div>
+            <span id="statusRight">SQLite3 Viewer v1.0</span>
+        </div>
+    </div>
+
+    <script>
+        let db = null;
+        let allData = [];
+        let currentPage = 1;
+        const pageSize = 15;
+        let sortCol = null;
+        let sortDir = 'asc';
+        let tempChart = null;
+        let humdChart = null;
+
+        // Initialize sql.js
+        let SQL;
+        initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` })
+            .then(sql => {
+                SQL = sql;
+                setStatus('ready', 'SQLite engine loaded — Ready to open database');
+            })
+            .catch(err => {
+                setStatus('error', 'Failed to load SQLite engine: ' + err.message);
+            });
+
+        // File input handler
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileName').textContent = file.name;
+            setStatus('loading', 'Loading ' + file.name + '...');
+
+            const reader = new FileReader();
+            reader.onload = function() {
+                try {
+                    const uInt8Array = new Uint8Array(reader.result);
+                    db = new SQL.Database(uInt8Array);
+                    setStatus('ready', `Loaded ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+                    loadData();
+                } catch (err) {
+                    setStatus('error', 'Error reading database: ' + err.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function loadData() {
+            if (!db) return;
+
+            // Get tables
+            const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+            if (tables.length === 0) {
+                setStatus('error', 'No tables found in database');
+                return;
+            }
+
+            const tableName = tables[0].values[0][0];
+            
+            // Get all data
+            const result = db.exec(`SELECT * FROM ${tableName}`);
+            if (result.length === 0) {
+                setStatus('error', 'Table is empty');
+                return;
+            }
+
+            const columns = result[0].columns;
+            allData = result[0].values;
+
+            // Show sections
+            document.getElementById('statsRow').style.display = 'grid';
+            document.getElementById('chartsGrid').style.display = 'grid';
+            document.getElementById('tableSection').style.display = 'block';
+            document.getElementById('sqlSection').style.display = 'block';
+
+            updateStats(columns);
+            renderTable(columns);
+            renderCharts(columns);
+
+            setStatus('ready', `Loaded ${allData.length} records from "${tableName}"`);
+        }
+
+        function updateStats(columns) {
+            const tempIdx = columns.indexOf('temp');
+            const humdIdx = columns.indexOf('humd');
+            const tsIdx = columns.indexOf('timestamp');
+
+            document.getElementById('statTotal').textContent = allData.length;
+
+            if (tempIdx >= 0) {
+                const temps = allData.map(r => parseFloat(r[tempIdx]));
+                const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
+                document.getElementById('statAvgTemp').textContent = avg.toFixed(1) + '°';
+            }
+
+            if (humdIdx >= 0) {
+                const humds = allData.map(r => parseFloat(r[humdIdx]));
+                const avg = humds.reduce((a, b) => a + b, 0) / humds.length;
+                document.getElementById('statAvgHumd').textContent = avg.toFixed(1) + '%';
+            }
+
+            if (tsIdx >= 0 && allData.length > 1) {
+                const first = new Date(allData[0][tsIdx]);
+                const last = new Date(allData[allData.length - 1][tsIdx]);
+                const hours = ((last - first) / 3600000).toFixed(1);
+                document.getElementById('statRange').textContent = hours + 'h';
+                document.getElementById('statRangeSub').textContent = `${allData[0][tsIdx].split(' ')[0]}`;
+            }
+        }
+
+        function renderCharts(columns) {
+            const tempIdx = columns.indexOf('temp');
+            const humdIdx = columns.indexOf('humd');
+            const tsIdx = columns.indexOf('timestamp');
+
+            if (tempIdx < 0 || tsIdx < 0) return;
+
+            const labels = allData.map(r => {
+                const ts = r[tsIdx];
+                if (!ts) return '';
+                const parts = ts.split(' ');
+                return parts.length > 1 ? parts[1].substring(0, 5) : ts;
+            });
+
+            const temps = allData.map(r => parseFloat(r[tempIdx]));
+            const humds = humdIdx >= 0 ? allData.map(r => parseFloat(r[humdIdx])) : [];
+
+            const chartDefaults = {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                        titleColor: '#e8ecf4',
+                        bodyColor: '#8892a8',
+                        borderColor: 'rgba(99, 102, 241, 0.3)',
+                        borderWidth: 1,
+                        cornerRadius: 10,
+                        padding: 12,
+                        titleFont: { family: 'Inter', weight: '600' },
+                        bodyFont: { family: 'JetBrains Mono' },
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#5a6478', maxTicksLimit: 10, font: { size: 10 } },
+                        grid: { color: 'rgba(42, 53, 85, 0.3)' }
+                    },
+                    y: {
+                        ticks: { color: '#5a6478', font: { size: 10 } },
+                        grid: { color: 'rgba(42, 53, 85, 0.3)' }
+                    }
+                }
+            };
+
+            // Temperature chart
+            if (tempChart) tempChart.destroy();
+            tempChart = new Chart(document.getElementById('tempChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: temps,
+                        borderColor: '#f472b6',
+                        backgroundColor: 'rgba(244, 114, 182, 0.08)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        pointHoverBackgroundColor: '#f472b6',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: chartDefaults
+            });
+
+            // Humidity chart
+            if (humdChart) humdChart.destroy();
+            if (humds.length > 0) {
+                humdChart = new Chart(document.getElementById('humdChart'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Humidity (%)',
+                            data: humds,
+                            borderColor: '#22d3ee',
+                            backgroundColor: 'rgba(34, 211, 238, 0.08)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            pointHoverRadius: 5,
+                            pointHoverBackgroundColor: '#22d3ee',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: chartDefaults
+                });
+            }
+        }
+
+        function renderTable(columns) {
+            // Header
+            const thead = document.getElementById('tableHead');
+            thead.innerHTML = '<tr>' + columns.map((col, i) => 
+                `<th onclick="sortTable(${i})" id="th-${i}">${col} <span class="sort-arrow">↕</span></th>`
+            ).join('') + '</tr>';
+
+            renderPage(columns);
+            renderPagination();
+
+            // Search
+            document.getElementById('searchBox').oninput = function() {
+                currentPage = 1;
+                renderPage(columns);
+                renderPagination();
+            };
+        }
+
+        function getFilteredData() {
+            const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+            let filtered = allData;
+            if (searchTerm) {
+                filtered = allData.filter(row => 
+                    row.some(cell => String(cell).toLowerCase().includes(searchTerm))
+                );
+            }
+            if (sortCol !== null) {
+                filtered = [...filtered].sort((a, b) => {
+                    const va = a[sortCol], vb = b[sortCol];
+                    const na = parseFloat(va), nb = parseFloat(vb);
+                    if (!isNaN(na) && !isNaN(nb)) {
+                        return sortDir === 'asc' ? na - nb : nb - na;
+                    }
+                    return sortDir === 'asc' 
+                        ? String(va).localeCompare(String(vb))
+                        : String(vb).localeCompare(String(va));
+                });
+            }
+            return filtered;
+        }
+
+        function renderPage(columns) {
+            const filtered = getFilteredData();
+            const start = (currentPage - 1) * pageSize;
+            const pageData = filtered.slice(start, start + pageSize);
+            const tbody = document.getElementById('tableBody');
+
+            const tempIdx = columns.indexOf('temp');
+            const humdIdx = columns.indexOf('humd');
+            const tsIdx = columns.indexOf('timestamp');
+
+            tbody.innerHTML = pageData.map(row => {
+                return '<tr>' + row.map((cell, i) => {
+                    if (i === tempIdx) {
+                        const v = parseFloat(cell);
+                        const cls = v >= 30 ? 'temp-hot' : v >= 24 ? 'temp-warm' : 'temp-cool';
+                        const pct = ((v - 15) / 25 * 100).toFixed(0);
+                        return `<td><div class="bar-wrapper"><span class="temp-cell ${cls}">${v.toFixed(1)}°C</span><div class="mini-bar"><div class="mini-bar-fill temp" style="width:${pct}%"></div></div></div></td>`;
+                    }
+                    if (i === humdIdx) {
+                        const v = parseFloat(cell);
+                        const cls = v >= 70 ? 'humd-high' : v >= 45 ? 'humd-mid' : 'humd-low';
+                        return `<td><div class="bar-wrapper"><span class="humd-cell ${cls}">${v.toFixed(1)}%</span><div class="mini-bar"><div class="mini-bar-fill humd" style="width:${v}%"></div></div></div></td>`;
+                    }
+                    if (i === tsIdx) {
+                        return `<td class="timestamp-cell">${cell}</td>`;
+                    }
+                    return `<td>${cell}</td>`;
+                }).join('') + '</tr>';
+            }).join('');
+        }
+
+        function renderPagination() {
+            const filtered = getFilteredData();
+            const totalPages = Math.ceil(filtered.length / pageSize);
+            const pagination = document.getElementById('pagination');
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = `<span class="page-info">Showing all ${filtered.length} records</span>`;
+                return;
+            }
+
+            let html = `<button class="page-btn" onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>◀</button>`;
+            
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= 2) {
+                    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+                } else if (Math.abs(i - currentPage) === 3) {
+                    html += `<span class="page-info">…</span>`;
+                }
+            }
+
+            html += `<button class="page-btn" onclick="goPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>▶</button>`;
+            html += `<span class="page-info">${filtered.length} records</span>`;
+
+            pagination.innerHTML = html;
+        }
+
+        function goPage(p) {
+            const filtered = getFilteredData();
+            const totalPages = Math.ceil(filtered.length / pageSize);
+            if (p < 1 || p > totalPages) return;
+            currentPage = p;
+            const columns = db.exec("SELECT * FROM sqlite_master WHERE type='table' LIMIT 1");
+            const tableName = columns[0].values[0][1];
+            const result = db.exec(`SELECT * FROM ${tableName} LIMIT 0`);
+            // Use cached columns
+            renderPage(getAllColumns());
+            renderPagination();
+        }
+
+        function getAllColumns() {
+            const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+            const tableName = tables[0].values[0][0];
+            const result = db.exec(`SELECT * FROM ${tableName} LIMIT 1`);
+            return result[0].columns;
+        }
+
+        function sortTable(colIdx) {
+            if (sortCol === colIdx) {
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortCol = colIdx;
+                sortDir = 'asc';
+            }
+
+            // Update sort arrows
+            document.querySelectorAll('th').forEach((th, i) => {
+                th.classList.toggle('sorted', i === colIdx);
+                const arrow = th.querySelector('.sort-arrow');
+                if (arrow) arrow.textContent = i === colIdx ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
+            });
+
+            currentPage = 1;
+            renderPage(getAllColumns());
+            renderPagination();
+        }
+
+        function runCustomSQL() {
+            if (!db) {
+                alert('Please load a database first!');
+                return;
+            }
+
+            const sql = document.getElementById('sqlInput').value.trim();
+            if (!sql) return;
+
+            const resultDiv = document.getElementById('sqlResult');
+
+            try {
+                const result = db.exec(sql);
+                if (result.length === 0) {
+                    resultDiv.innerHTML = '<p style="color:var(--success);padding:0.5rem 0;">✅ Query executed successfully (no results returned)</p>';
+                    return;
+                }
+
+                const columns = result[0].columns;
+                const rows = result[0].values;
+
+                let html = '<table><thead><tr>';
+                html += columns.map(c => `<th>${c}</th>`).join('');
+                html += '</tr></thead><tbody>';
+                html += rows.map(row => 
+                    '<tr>' + row.map(cell => `<td>${cell !== null ? cell : 'NULL'}</td>`).join('') + '</tr>'
+                ).join('');
+                html += '</tbody></table>';
+
+                resultDiv.innerHTML = html;
+                setStatus('ready', `Query returned ${rows.length} row(s)`);
+            } catch (err) {
+                resultDiv.innerHTML = `<p style="color:var(--danger);padding:0.5rem 0;">❌ ${err.message}</p>`;
+                setStatus('error', 'SQL Error: ' + err.message);
+            }
+        }
+
+        // Enter key to run SQL
+        document.getElementById('sqlInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') runCustomSQL();
+        });
+
+        function setStatus(type, msg) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            dot.className = 'status-dot' + (type === 'error' ? ' error' : '');
+            text.textContent = msg;
+        }
+    </script>
+</body>
+</html>

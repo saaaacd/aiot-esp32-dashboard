@@ -1,0 +1,9 @@
+[theme]
+# Default base theme, user can still switch in the Streamlit Settings menu
+base = "dark"
+
+# Primary accent color for interactive elements (violet/purple)
+primaryColor = "#8b5cf6"
+
+# Font
+font = "sans serif"
